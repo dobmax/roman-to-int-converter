@@ -4,20 +4,20 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.Arrays;
 import java.util.List;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class RomanToIntegerConverterTest {
 
-    private static final Character[] lowerCaseAlphabet = {
-            'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
-    };
-
-    private static final List<String> nonRomanDigits = Arrays.stream(lowerCaseAlphabet)
-            .filter(c -> !RomanToIntegerConverter.ROMAN_DIGITS.contains(c))
-            .map(Object::toString)
+    // many possible values skipped for simplification
+    private static final List<String> NON_ROMAN_DIGITS = IntStream.range(0, 128)
+            .filter(asciiIntVal -> !RomanToIntegerConverter.ROMAN_DIGITS.contains((char) asciiIntVal))
+            .boxed()
+            .map(asciiIntVal -> String.valueOf((char) asciiIntVal.intValue()))
             .toList();
 
     @ParameterizedTest
@@ -26,19 +26,37 @@ class RomanToIntegerConverterTest {
             "LVIII,58",
             "MCMXCIV,1994",
     })
-    void shouldConvertRomanDigitToInteger_whenGivenRomanIsValid(String actualRoman, int expectedInteger) {
+    void shouldConvertRomanDigitToInteger_whenGivenRomanOneIsValid(String actualRoman, int expectedInteger) {
         var actual = RomanToIntegerConverter.convert(actualRoman);
         assertThat(actual).isEqualTo(expectedInteger);
     }
 
     @ParameterizedTest
     @MethodSource("nonRomanDigitsProvider")
-    void shouldNotConvertRomanDigitToInteger_whenGivenRomanIsInvalid(String actualNonRoman) {
-        var actual = RomanToIntegerConverter.convert(actualNonRoman);
-        assertThat(actual).isZero();
+    void shouldThrowConstraintViolationException_whenGivenRomanDigitIsInvalid(TestData testData) {
+        assertThat(
+                catchThrowableOfType(
+                        () -> RomanToIntegerConverter.convert(testData.invalidRomanDigit), ConstraintViolationException.class
+                )
+        )
+                .hasNoCause()
+                .hasMessage(testData.errorMessage);
+
     }
 
-    private static List<String> nonRomanDigitsProvider() {
-        return nonRomanDigits;
+    private static Stream<TestData> nonRomanDigitsProvider() {
+        var firstPortion = Stream.of(
+                new TestData(null, "Roman numeral can’t be null"),
+                new TestData("", "Invalid Roman numeral detected: ''"),
+                new TestData(" ", "Invalid Roman numeral detected: ' '")
+        );
+
+        var secondPortion = NON_ROMAN_DIGITS.stream()
+                .map(nonRoman -> new TestData(nonRoman, "Invalid Roman numeral detected: '%s'".formatted(nonRoman)));
+
+        return Stream.concat(firstPortion, secondPortion);
+    }
+
+    record TestData(String invalidRomanDigit, String errorMessage) {
     }
 }
